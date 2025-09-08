@@ -1,0 +1,155 @@
+﻿@page "/"
+@page "/index"
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Chat App</PageTitle>
+
+@if (string.IsNullOrWhiteSpace(userName))
+{
+	<UserInfoCollentionComponent OnUserInfoSaved="OnUserInfoProvided" />
+}
+
+else
+{
+	<div class="row">
+		<div class="col-3">
+			<table style="width: 100%">
+				<ConnectedUsersComponent @ref="connectedUsersComponent"
+					ConnectedUsers="this.connectedUsers" 
+					LogonUserId="@this.userId" 
+					OnUserSelected="OnUserSelected" 
+					/>
+			</table>
+		</div>
+		<div class="col-9">
+			<ChatComponent 
+				FromUserId="@this.userId" 
+				ToUser="targetUser" 
+				ConnectedUsers="this.connectedUsers" 
+				hubConnection="this.hubConnection"
+				OnMessage="OnMessageSent" 
+			/>
+			@if (systemMessage is not null && systemMessage.Count > 0)
+			{
+				<ul>
+					@foreach (var message in systemMessage)
+					{
+						<li>@message</li>
+					}
+				</ul>
+			}
+		</div>
+	</div>
+	
+		
+	
+}
+
+@code{
+
+	private List<string> systemMessage = new List<string>();
+	private List<ConnectedUser> connectedUsers = new List<ConnectedUser>();
+	private string userName = string.Empty;
+	private string userId = string.Empty;
+	private HubConnection? hubConnection;
+	private ConnectedUser? targetUser;
+	ConnectedUsersComponent? connectedUsersComponent;
+
+	/*protected override async Task OnInitializedAsync()
+	{
+		//Console.WriteLine("Hello world");
+		var hubConnection = new HubConnectionBuilder()
+			.WithUrl($"https://localhost:7145/chathub")
+			.Build();
+	hubConnection.On<string>("ReceiveSystemMessage", ReceiveSystemMessage);
+
+		await hubConnection.StartAsync();
+	}*/
+
+	private async Task ConnectToServer(string userId, string username)
+	{
+	//Console.WriteLine("Hello world");
+	hubConnection = new HubConnectionBuilder()
+		.WithUrl($"https://localhost:7145/chathub?userid={userId}&username={username}")
+		.Build();
+	hubConnection.On<string>("ReceiveSystemMessage", ReceiveSystemMessage);
+	hubConnection.On<List<ConnectedUser>>("UpdateUserList", UpdateUserList);
+	hubConnection.On<string, string, string>("ReceiveMessage", ReceiveMessage);
+
+	await hubConnection.StartAsync();
+	}
+
+	private void UpdateUserList(List<ConnectedUser> users)
+	{
+	if (users is not null && users.Count > 0)
+	{
+		var existingUserDic = connectedUsers.ToDictionary(u => u.ConnectionId ?? string.Empty);
+
+		//Add new users
+		foreach (var user in users)
+		{
+
+			if (existingUserDic.ContainsKey(user.ConnectionId ?? string.Empty))
+			{
+				connectedUsers.Add(user);
+			}
+		}
+
+		//Remove disconnected users
+		connectedUsers = connectedUsers
+							.Where(u => users.Any(newUser => newUser.ConnectionId == u.ConnectionId))
+							.ToList();
+
+		//connectedUsers = users;
+		StateHasChanged();
+	}
+	}
+
+	private void ReceiveSystemMessage(string message)
+	{
+
+	if (!string.IsNullOrWhiteSpace(message))
+	{
+		systemMessage.Add(message);
+		StateHasChanged();
+	}
+
+	}
+
+	private void ReceiveMessage(string fromUserId, string fromConnectionId, string message)
+	{
+	if (!string.IsNullOrWhiteSpace(fromConnectionId))
+	{
+		var fromUser = connectedUsers.FirstOrDefault(u => u.ConnectionId == fromConnectionId);
+		if (fromUser is not null)
+		{
+			fromUser.Messages.Add(new ChatMessage
+					{
+						FromUserId = fromUserId,
+						ToUserId = this.userId,
+						Message = message,
+					});
+			//await JSRuntime.InvokeVoidAsync("playSound", "/path"); //async Task
+			StateHasChanged();
+		}
+	}
+	}
+
+	private async Task OnUserInfoProvided(string userName)
+	{
+	this.userName = userName;
+	this.userId = Guid.NewGuid().ToString();
+
+	await ConnectToServer(this.userId, userName);
+	}
+
+	private void OnUserSelected(ConnectedUser toUser)
+	{
+	this.targetUser = toUser;
+	}
+
+	private void OnMessageSent(string toUserId)
+	{
+	connectedUsersComponent?.ClearUnreadMessageCount(toUserId);
+	}
+}
