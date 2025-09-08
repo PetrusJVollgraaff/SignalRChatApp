@@ -14,12 +14,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\ChatContracts\ChatContracts.csproj" />
+    <Folder Include="wwwroot\images\" />
+    <Folder Include="wwwroot\sounds\" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="wwwroot\images\" />
-    <Folder Include="wwwroot\sounds\" />
+    <ProjectReference Include="..\..\ChatContracts\ChatContracts.csproj" />
   </ItemGroup>
 
 </Project>
