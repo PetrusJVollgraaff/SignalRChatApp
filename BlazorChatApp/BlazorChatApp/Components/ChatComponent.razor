@@ -1,0 +1,74 @@
+﻿@if (ToUser is not null && ConnectedUsers is not null && ConnectedUsers.Count > 0)
+{
+	<div class="card">
+		<div class="card-header">
+			Chatting with @ToUser.UserName
+		</div>
+		<div class="overflow-auto" style="min-height:200px">
+			<ul class="list-group">
+				@foreach (var message in ToUser.Messages)
+				{
+					var fromUser = ConnectedUsers.FirstOrDefault(u => u.UserId == message.FromUserId);
+					<li class="list-group-item d-flex aligin-items-start message-item">
+						<div>
+							<b>@fromUser?.UserName</b>
+							@message.Message
+						</div>
+					</li>
+				}
+			</ul>
+		</div>
+		<div class="card-footer">
+			<div class="input-group">
+				<input type="text" placeholder="Type your message here..." @bind="newMessage" @bind:event="oninput" @onkeydown="HandleKeyPress" />
+
+				<button class="btn btn-primary" @onclick=SendMessage>Send</button>
+			</div>
+		</div>
+
+	</div>
+}
+
+@code {
+	[Parameter]
+	public string? FromUserId { get; set; }
+	[Parameter]
+	public ConnectedUser? ToUser { get; set; }
+	[Parameter]
+	public List<ConnectedUser>? ConnectedUsers { get; set; }
+
+	[Parameter]
+	public HubConnection? hubConnection { get; set; }
+	[Parameter]
+	public EventCallback<string> OnMessage { get; set; }
+
+
+	private string newMessage = string.Empty;
+
+	private async Task SendMessage()
+	{
+		if (hubConnection is not null && ToUser is not null && !string.IsNullOrWhiteSpace(newMessage))
+		{
+			//Send the message to the server
+			await hubConnection.InvokeAsync("ForwardMessage", this.FromUserId, ToUser.ConnectionId, newMessage);
+
+			ToUser.Messages.Add(new ChatMessage
+			{
+				FromUserId = this.FromUserId,
+				ToUserId = ToUser.UserId,
+				Message = newMessage,
+			});
+
+			newMessage = string.Empty;
+			await OnMessage.InvokeAsync(ToUser.UserId);
+		}
+	}
+
+	private async Task HandleKeyPress(KeyboardEventArgs e)
+	{
+		if (e.Key == "Enter")
+		{
+			await SendMessage();
+		}
+	}
+}
